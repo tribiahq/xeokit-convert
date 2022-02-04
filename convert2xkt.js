@@ -12,6 +12,7 @@ program.version(package.version, '-v, --version');
 
 program
     .option('-s, --source [file]', 'path to source file')
+    .option(`-c, --config [string]`, `path to config file (optional)`)
     .option('-f, --format [string]', 'source file format (optional); supported formats are gltf, ifc, laz, las, pcd, ply, stl and cityjson')
     .option('-m, --metamodel [file]', 'path to source metamodel JSON file (optional)')
     .option('-i, --include [types]', 'only convert these types (optional)')
@@ -55,7 +56,22 @@ async function main() {
         }
     }
 
+    let configs = null;
+
+    if (options.config) {
+        log('Reading config file: ' + options.config);
+        try {
+            const configsFileData = fs.readFileSync(options.config);
+            configs = JSON.parse(configsFileData);
+        } catch (err) {
+            console.error(err);
+            process.exit(1);
+            return;
+        }
+    }
+
     const result = await convert2xkt({
+        configs: configs,
         source: options.source,
         format: options.format,
         metaModelSource: options.metamodel,

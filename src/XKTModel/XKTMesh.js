@@ -3,7 +3,7 @@
  *
  * * Created by {@link XKTModel#createEntity}
  * * Stored in {@link XKTEntity#meshes} and {@link XKTModel#meshesList}
- * * Specifies color and opacity
+ * * Has an {@link XKTGeometry} and {@link XKTMaterial}, which it can share with other {@link XKTMesh}es
  *
  * @class XKTMesh
  */
@@ -50,32 +50,11 @@ class XKTMesh {
         this.geometry = cfg.geometry;
 
         /**
-         * RGB color of this XKTMesh.
+         * The {@link XKTMaterial} that defines the appearance of this XKTMesh.
          *
-         * @type {Uint8Array}
+         * @type {XKTMaterial}
          */
-        this.color = cfg.color || new Uint8Array(3);
-
-        /**
-         * PBR metallness of this XKTMesh.
-         *
-         * @type {Number}
-         */
-        this.metallic = (cfg.metallic !== null && cfg.metallic !== undefined) ? cfg.metallic : 0;
-
-        /**
-         * PBR roughness of this XKTMesh.
-         *
-         * @type {Number}
-         */
-        this.roughness = (cfg.roughness !== null && cfg.roughness !== undefined) ? cfg.roughness : 1;
-
-        /**
-         * Opacity of this XKTMesh.
-         *
-         * @type {Number}
-         */
-        this.opacity = (cfg.opacity !== undefined && cfg.opacity !== null) ? cfg.opacity : 1.0;
+        this.material = cfg.material;
 
         /**
          * The owner {@link XKTEntity}.

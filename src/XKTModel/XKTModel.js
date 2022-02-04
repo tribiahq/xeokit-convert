@@ -12,6 +12,8 @@ import {XKTMetaObject} from "./XKTMetaObject.js";
 import {XKTPropertySet} from "./XKTPropertySet.js";
 import {mergeVertices} from "../lib/mergeVertices.js";
 import {XKT_INFO} from "../XKT_INFO.js";
+import {XKTTexture} from "./XKTTexture";
+import {XKTMaterial} from "./XKTMaterial";
 
 const tempVec4a = math.vec4([0, 0, 0, 1]);
 const tempVec4b = math.vec4([0, 0, 0, 1]);
@@ -124,7 +126,7 @@ class XKTModel {
          * @property xktVersion;
          * @type {number}
          */
-        this.xktVersion =  XKT_INFO.xktVersion;
+        this.xktVersion = XKT_INFO.xktVersion;
 
         /**
          *
@@ -202,6 +204,46 @@ class XKTModel {
          * @type {XKTGeometry[]}
          */
         this.geometriesList = [];
+
+        /**
+         * Map of {@link XKTTexture}s within this XKTModel, each mapped to {@link XKTTexture#textureId}.
+         *
+         * Created by {@link XKTModel#createTexture}.
+         *
+         * @type {{Number:XKTTexture}}
+         */
+        this.textures = {};
+
+        /**
+         * List of {@link XKTTexture}s within this XKTModel, in the order they were created.
+         *
+         * Each XKTTexture holds its position in this list in {@link XKTTexture#textureIndex}.
+         *
+         * Created by {@link XKTModel#finalize}.
+         *
+         * @type {XKTTexture[]}
+         */
+        this.texturesList = [];
+
+        /**
+         * Map of {@link XKTMaterial}s within this XKTModel, each mapped to {@link XKTMaterial#materialId}.
+         *
+         * Created by {@link XKTModel#createMaterial}.
+         *
+         * @type {{Number:XKTMaterial}}
+         */
+        this.materials = {};
+
+        /**
+         * List of {@link XKTMaterial}s within this XKTModel, in the order they were created.
+         *
+         * Each XKTMaterial holds its position in this list in {@link XKTMaterial#materialIndex}.
+         *
+         * Created by {@link XKTModel#finalize}.
+         *
+         * @type {XKTMaterial[]}
+         */
+        this.materialsList = [];
 
         /**
          * Map of {@link XKTMesh}s within this XKTModel, each mapped to {@link XKTMesh#meshId}.
@@ -377,7 +419,157 @@ class XKTModel {
     }
 
     /**
+     * Creates an {@link XKTTexture} within this XKTModel.
+     *
+     * Registers the new {@link XKTTexture} in {@link XKTModel#textures} and {@link XKTModel#texturesList}.
+     *
+     * Logs error and does nothing if this XKTModel has been finalized (see {@link XKTModel#finalized}).
+     *
+     * @param {*} params Method parameters.
+     * @param {Number} params.textureId Unique ID for the {@link XKTTexture}.
+     * @param {String} params.data Image data for the texture.
+     * @returns {XKTTexture} The new {@link XKTTexture}.
+     */
+    createTexture(params) {
+
+        if (!params) {
+            throw "Parameters expected: params";
+        }
+
+        if (params.textureId === null || params.textureId === undefined) {
+            throw "Parameter expected: params.textureId";
+        }
+
+        if (!params.data) {
+            throw "Parameter expected: params.data";
+        }
+
+        if (this.finalized) {
+            console.error("XKTModel has been finalized, can't add more textures");
+            return;
+        }
+
+        if (this.textures[params.textureId]) {
+            console.error("XKTTexture already exists with this ID: " + params.textureId);
+            return;
+        }
+
+        const textureId = params.textureId;
+        const data = params.data;
+        const texture = new XKTTexture({textureId, textureIndex: this.texturesList.length, data});
+
+        this.textures[textureId] = texture;
+        this.texturesList.push(texture);
+
+        return texture;
+    }
+
+    /**
+     * Creates a simple {@link XKTMaterial} with color, opacity and textures.
+     *
+     * Registers the new {@link XKTMaterial} in {@link XKTModel#materials} and {@link XKTModel#materialsList}.
+     *
+     * Logs error and does nothing if this XKTModel has been finalized (see {@link XKTModel#finalized}).
+     *
+     * @param {*} params Method parameters.
+     * @param {Number} params.materialId Unique ID for the {@link XKTMaterial}.
+     * @param {Number} [params.materialType="basic"] Identifies the material type.
+     * @param {Number} [params.color=[1,1,1]] Albedo color for the material.
+     * @param {Number} [params.opacity=1] Opacity for the material.
+     * @param {Number} [params.colorTextureId] ID of an existing {@link XKTTexture} in {@link XKTModel#textures}, to apply to the material's ````color````.
+     * @param {Number} [params.opacityTextureId] ID of an existing {@link XKTTexture} in {@link XKTModel#textures}, to apply to the material's ````opacity````.
+     * @returns {XKTMaterial} The new {@link XKTMaterial}.
+     */
+    createBasicMaterial(params) {
+        const cfg = {
+            materialId: params.materialId,
+            materialType: params.materialType || "basic",
+            textureIds: [],
+            attributes: []
+        }
+        params.color
+            ? cfg.attributes.push(params.color[0], params.color[1], params.color[2])
+            : cfg.attributes.push(1, 1, 1);
+        (params.opacity !== undefined)
+            ? cfg.attributes.push(params.opacity)
+            : cfg.attributes.push(1);
+        (params.colorTextureId !== undefined)
+            ? cfg.textureIds.push(params.colorTextureId)
+            : cfg.textureIds.push(-1);
+        (params.opacityTextureId !== undefined)
+            ? cfg.textureIds.push(params.opacityTextureId)
+            : cfg.textureIds.push(-1);
+        return this.createMaterial(cfg)
+    }
+
+    /**
+     * Creates an {@link XKTMaterial} within this XKTModel.
+     *
+     * Registers the new {@link XKTMaterial} in {@link XKTModel#materials} and {@link XKTModel#materialsList}.
+     *
+     * Logs error and does nothing if this XKTModel has been finalized (see {@link XKTModel#finalized}).
+     *
+     * @param {*} params Method parameters.
+     * @param {Number} params.materialId Unique ID for the {@link XKTMaterial}.
+     * @param {Number} params.materialType Identifies the material type.
+     * @param {Number[]} params.textureIds IDs of zero or more existing {@link XKTTexture}s in {@link XKTModel#textures}. Semantics are determined by the material type.
+     * @param {Number[]} params.attributes Flattened array of float attributes for the material. Semantics are determined by the material type.
+     * @returns {XKTMaterial} The new {@link XKTMaterial}.
+     */
+    createMaterial(params) {
+
+        if (!params) {
+            throw "Parameters expected: params";
+        }
+
+        if (params.materialId === null || params.materialId === undefined) {
+            throw "Parameter expected: params.materialId";
+        }
+
+        if (params.materialType === undefined) {
+            throw "Parameter expected: params.materialType";
+        }
+
+        if (this.finalized) {
+            console.error("XKTModel has been finalized, can't add more materials");
+            return;
+        }
+
+        if (this.materials[params.materialId]) {
+            console.error("XKTMaterial already exists with this ID: " + params.materialId);
+            return;
+        }
+
+        const textureIds = params.textureIds;
+
+        if (textureIds) {
+            for (let i = 0, len = textureIds.length; i < len; i++) {
+                const textureId = textureIds[i];
+                if (!this.textures[textureId]) {
+                    console.error("XKTTexture not found: " + textureId);
+                    return;
+                }
+            }
+        }
+
+        const material = new XKTMaterial({
+            materialId: params.materialId,
+            materialIndex: this.materialsList.length,
+            materialType: params.materialType || 0,
+            attributes: params.attributes || [],
+            textureIds: textureIds
+        });
+
+        this.materials[params.materialId] = material;
+        this.materialsList.push(material);
+
+        return material;
+    }
+
+    /**
      * Creates an {@link XKTGeometry} within this XKTModel.
+     *
+     * Registers the new {@link XKTGeometry} in {@link XKTModel#geometries} and {@link XKTModel#geometriesList}.
      *
      * Logs error and does nothing if this XKTModel has been finalized (see {@link XKTModel#finalized}).
      *
@@ -387,6 +579,8 @@ class XKTModel {
      * @param {Float64Array} params.positions Floating-point Local-space vertex positions for the {@link XKTGeometry}. Required for all primitive types.
      * @param {Number[]} [params.normals] Floating-point vertex normals for the {@link XKTGeometry}. Only used with triangles primitives. Ignored for points and lines.
      * @param {Number[]} [params.colors] Floating-point RGBA vertex colors for the {@link XKTGeometry}. Required for points primitives. Ignored for lines and triangles.
+     * @param {Number[]} [params.colorsCompressed] Integer RGBA vertex colors for the {@link XKTGeometry}. Required for points primitives. Ignored for lines and triangles.
+     * @param {Number[]} [params.uvs] Floating-point vertex UV coordinates for the {@link XKTGeometry}.
      * @param {Number[]} [params.colorsCompressed] Integer RGBA vertex colors for the {@link XKTGeometry}. Required for points primitives. Ignored for lines and triangles.
      * @param {Uint32Array} [params.indices] Indices for the {@link XKTGeometry}. Required for triangles and lines primitives. Ignored for points.
      * @param {Number} [params.edgeThreshold=10]
@@ -454,7 +648,8 @@ class XKTModel {
             geometryId: geometryId,
             geometryIndex: this.geometriesList.length,
             primitiveType: primitiveType,
-            positions: positions
+            positions: positions,
+            uvs: params.uvs
         }
 
         if (triangles) {
@@ -514,6 +709,8 @@ class XKTModel {
      *
      * An {@link XKTMesh} can be owned by one {@link XKTEntity}, which can own multiple {@link XKTMesh}es.
      *
+     * Registers the new {@link XKTMesh} in {@link XKTModel#meshes} and {@link XKTModel#meshesList}.
+     *
      * @param {*} params Method parameters.
      * @param {Number} params.meshId Unique ID for the {@link XKTMesh}.
      * @param {Number} params.geometryId ID of an existing {@link XKTGeometry} in {@link XKTModel#geometries}.
@@ -547,27 +744,31 @@ class XKTModel {
         }
 
         const geometry = this.geometries[params.geometryId];
-
         if (!geometry) {
             console.error("XKTGeometry not found: " + params.geometryId);
             return;
         }
-
         geometry.numInstances++;
 
+        let material = null;
+        if (params.materialId) {
+            material = this.materials[params.materialId];
+            if (!material) {
+                console.error("XKTMaterial not found: " + params.materialId);
+                return;
+            }
+            material.numInstances++;
+        }
+
         let matrix = params.matrix;
-
         if (!matrix) {
-
             const position = params.position;
             const scale = params.scale;
             const rotation = params.rotation;
-
             if (position || scale || rotation) {
                 matrix = math.identityMat4();
                 const quaternion = math.eulerToQuaternion(rotation || [0, 0, 0], "XYZ", math.identityQuaternion());
                 math.composeMat4(position || [0, 0, 0], quaternion, scale || [1, 1, 1], matrix)
-
             } else {
                 matrix = math.identityMat4();
             }
@@ -577,13 +778,10 @@ class XKTModel {
 
         const mesh = new XKTMesh({
             meshId: params.meshId,
-            meshIndex: meshIndex,
-            matrix: matrix,
-            geometry: geometry,
-            color: params.color,
-            metallic: params.metallic,
-            roughness: params.roughness,
-            opacity: params.opacity
+            meshIndex,
+            matrix,
+            geometry,
+            material
         });
 
         this.meshes[mesh.meshId] = mesh;
@@ -594,6 +792,8 @@ class XKTModel {
 
     /**
      * Creates an {@link XKTEntity} within this XKTModel.
+     *
+     * Registers the new {@link XKTEntity} in {@link XKTModel#entities} and {@link XKTModel#entitiesList}.
      *
      * Logs error and does nothing if this XKTModel has been finalized (see {@link XKTModel#finalized}).
      *
@@ -1077,8 +1277,8 @@ class XKTModel {
                 }
             }
         }
-        let vertexIndexMapping = new Array (maxNumPositions / 3);
-        let edges = new Array (maxNumIndices);
+        let vertexIndexMapping = new Array(maxNumPositions / 3);
+        let edges = new Array(maxNumIndices);
         for (let i = 0, len = this.geometriesList.length; i < len; i++) {
             const geometry = this.geometriesList[i];
             if (geometry.primitiveType === "triangles") {

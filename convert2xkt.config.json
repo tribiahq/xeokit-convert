@@ -1,0 +1,20 @@
+{
+  "formatConfigs": {
+    "las": {
+      "rotateX": false,
+      "colorDepth": 8,
+      "skip": 1
+    },
+    "laz": {
+      "rotateX": false,
+      "colorDepth": 8,
+      "skip": 1
+    },
+    "json": {},
+    "glTF": {},
+    "ifc": {},
+    "stl": {},
+    "ply": {},
+    "3dxml": {}
+  }
+}

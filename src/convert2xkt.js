@@ -37,6 +37,7 @@ const DOMParser = require('xmldom').DOMParser;
  *  });
  ````
  * @param {Object} params Conversion parameters.
+ * @param {Object} [params.configs] Configurations object.
  * @param {String} [params.source] Path to source file. Alternative to ````sourceData````.
  * @param {ArrayBuffer|JSON} [params.sourceData] Source file data. Alternative to ````source````.
  * @param {String} [params.sourceFormat] Format of source file/data. Always needed with ````sourceData````, but not normally needed with ````source````, because convert2xkt will determine the format automatically from the file extension of ````source````.
@@ -54,6 +55,7 @@ const DOMParser = require('xmldom').DOMParser;
  * @return {Promise<number>}
  */
 function convert2xkt({
+                         configs,
                          source,
                          sourceData,
                          sourceFormat,
@@ -162,13 +164,15 @@ function convert2xkt({
 
         function convertForFormat() {
 
+            const formatConfigs = configs && configs.formatConfigs ? configs.formatConfigs[ext] || {} : {};
+
             switch (ext) {
                 case "json":
                     convert(parseCityJSONIntoXKTModel, {
                         data: JSON.parse(sourceData),
                         xktModel,
                         stats,
-                        rotateX,
+                        rotateX: rotateX || formatConfigs.rotateX,
                         log
                     });
                     break;
@@ -190,9 +194,9 @@ function convert2xkt({
                     convert(parseIFCIntoXKTModel, {
                         data: sourceData,
                         xktModel,
-                        wasmPath: "./",
-                        includeTypes,
-                        excludeTypes,
+                        wasmPath: formatConfigs.wasmPath || "./",
+                        includeTypes: includeTypes || formatConfigs.includeTypes,
+                        excludeTypes: excludeTypes || formatConfigs.excludeTypes,
                         stats,
                         log
                     });
@@ -203,7 +207,7 @@ function convert2xkt({
                         data: sourceData,
                         xktModel,
                         stats,
-                        rotateX,
+                        rotateX: rotateX || formatConfigs.rotateX,
                         log
                     });
                     break;
@@ -213,6 +217,7 @@ function convert2xkt({
                         data: sourceData,
                         xktModel,
                         stats,
+                        rotateX: rotateX || formatConfigs.rotateX,
                         log
                     });
                     break;

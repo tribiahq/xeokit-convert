@@ -34,6 +34,8 @@ function getModelData(xktModel) {
     const propertySetsList = xktModel.propertySetsList;
     const metaObjectsList = xktModel.metaObjectsList;
     const geometriesList = xktModel.geometriesList;
+    const texturesList = xktModel.texturesList;
+    const materialsList = xktModel.materialsList;
     const meshesList = xktModel.meshesList;
     const entitiesList = xktModel.entitiesList;
     const tilesList = xktModel.tilesList;
@@ -41,6 +43,8 @@ function getModelData(xktModel) {
     const numPropertySets = propertySetsList.length;
     const numMetaObjects = metaObjectsList.length;
     const numGeometries = geometriesList.length;
+    const numTextures = texturesList.length;
+    const numMaterials = materialsList.length;
     const numMeshes = meshesList.length;
     const numEntities = entitiesList.length;
     const numTiles = tilesList.length;
@@ -48,9 +52,13 @@ function getModelData(xktModel) {
     let lenPositions = 0;
     let lenNormals = 0;
     let lenColors = 0;
+    let lenUVs = 0;
     let lenIndices = 0;
     let lenEdgeIndices = 0;
     let lenMatrices = 0;
+    let lenTextures = 0;
+    let lenMaterialTextures = 0;
+    let lenMaterialAttributes = 0;
 
     for (let geometryIndex = 0; geometryIndex < numGeometries; geometryIndex++) {
         const geometry = geometriesList [geometryIndex];
@@ -63,11 +71,30 @@ function getModelData(xktModel) {
         if (geometry.colorsCompressed) {
             lenColors += geometry.colorsCompressed.length;
         }
+        if (geometry.uvs) {
+            lenUVs += geometry.uvs.length;
+        }
         if (geometry.indices) {
             lenIndices += geometry.indices.length;
         }
         if (geometry.edgeIndices) {
             lenEdgeIndices += geometry.edgeIndices.length;
+        }
+    }
+
+    for (let textureIndex = 0; textureIndex < numTextures; textureIndex++) {
+        const texture = texturesList[textureIndex];
+        //   lenTextures += texture.data.size();
+        lenTextures++;
+    }
+
+    for (let materialIndex = 0; materialIndex < numMaterials; materialIndex++) {
+        const material = materialsList[materialIndex];
+        if (material.textures) {
+            lenMaterialTextures += material.textures.length;
+        }
+        if (material.attributes) {
+            lenMaterialAttributes += material.attributes.length;
         }
     }
 
@@ -84,13 +111,19 @@ function getModelData(xktModel) {
 
         metadata: {},
 
+        textures: new Uint8Array(lenTextures), // All textures
+
         // Geometry data - vertex attributes and indices
 
         positions: new Uint16Array(lenPositions), // All geometry arrays
         normals: new Int8Array(lenNormals),
         colors: new Uint8Array(lenColors),
+        uvs: new Uint32Array(lenUVs),
         indices: new Uint32Array(lenIndices),
         edgeIndices: new Uint32Array(lenEdgeIndices),
+
+        materialTextures: new Uint32Array(lenMaterialTextures), // Texture indices, in groups for materials (this reuses textures among materials)
+        materialAttributes: new Uint8Array(lenMaterialAttributes), // Material attributes, in groups for materials
 
         // Transform matrices shared by meshes
 
@@ -100,12 +133,19 @@ function getModelData(xktModel) {
 
         reusedGeometriesDecodeMatrix: new Float32Array(xktModel.reusedGeometriesDecodeMatrix), // A single, global vertex position de-quantization matrix for all reused geometries. Reused geometries are quantized to their collective Local-space AABB, and this matrix is derived from that AABB.
 
+        // Materials
+
+        eachMaterialType: new Uint8Array(numMaterials), // Material type for each material
+        eachMaterialTexturesPortion: new Uint32Array(numMaterials), // For each material, an index to its first element in data.materialTextures. If the next material has the same index, then this material has no textures.
+        eachMaterialAttributesPortion: new Uint32Array(numMaterials), // For each material, an index to its first element in data.materialAttributes. If the next material has the same index, then this material has no attributes.
+
         // Geometries
 
         eachGeometryPrimitiveType: new Uint8Array(numGeometries), // Primitive type for each geometry (0=solid triangles, 1=surface triangles, 2=lines, 3=points)
         eachGeometryPositionsPortion: new Uint32Array(numGeometries), // For each geometry, an index to its first element in data.positions. Every primitive type has positions.
         eachGeometryNormalsPortion: new Uint32Array(numGeometries), // For each geometry, an index to its first element in data.normals. If the next geometry has the same index, then this geometry has no normals.
         eachGeometryColorsPortion: new Uint32Array(numGeometries), // For each geometry, an index to its first element in data.colors. If the next geometry has the same index, then this geometry has no colors.
+        eachGeometryUVsPortion: new Float32Array(numGeometries), // For each geometry, an index to its first element in data.uvs. If the next geometry has the same index, then this geometry has no UVs.
         eachGeometryIndicesPortion: new Uint32Array(numGeometries), // For each geometry, an index to its first element in data.indices. If the next geometry has the same index, then this geometry has no indices.
         eachGeometryEdgeIndicesPortion: new Uint32Array(numGeometries), // For each geometry, an index to its first element in data.edgeIndices. If the next geometry has the same index, then this geometry has no edge indices.
 
@@ -134,9 +174,12 @@ function getModelData(xktModel) {
     let countPositions = 0;
     let countNormals = 0;
     let countColors = 0;
+    let countUVs = 0;
     let countIndices = 0;
     let countEdgeIndices = 0;
-    let countMeshColors = 0;
+
+    let countMaterialTextures = 0;
+    let countMaterialAttributes = 0;
 
     // Metadata
 
@@ -208,6 +251,7 @@ function getModelData(xktModel) {
         data.eachGeometryPositionsPortion [geometryIndex] = countPositions;
         data.eachGeometryNormalsPortion [geometryIndex] = countNormals;
         data.eachGeometryColorsPortion [geometryIndex] = countColors;
+        data.eachGeometryUVsPortion [geometryIndex] = countUVs;
         data.eachGeometryIndicesPortion [geometryIndex] = countIndices;
         data.eachGeometryEdgeIndicesPortion [geometryIndex] = countEdgeIndices;
 
@@ -223,6 +267,10 @@ function getModelData(xktModel) {
             data.colors.set(geometry.colorsCompressed, countColors);
             countColors += geometry.colorsCompressed.length;
         }
+        if (geometry.uvs) {
+            data.uvs.set(geometry.uvs, countUVs);
+            countUVs += geometry.uvs.length;
+        }
         if (geometry.indices) {
             data.indices.set(geometry.indices, countIndices);
             countIndices += geometry.indices.length;
@@ -233,28 +281,31 @@ function getModelData(xktModel) {
         }
     }
 
+
+    for (let materialIndex = 0; materialIndex < numMaterials; materialIndex++) {
+        const material = materialsList[materialIndex];
+        const attributes = material.attributes;
+        const textures = material.textures;
+        for (let i = 0, len = attributes.length; i < len; i++) {
+            const attribute = attributes[i];
+            data.materialAttributes[countMaterialAttributes++] = attribute;
+        }
+        for (let i = 0, len = textures.length; i < len; i++) {
+            const texture = textures[i];
+            data.materialTextures[countMaterialTextures++] = texture.textureIndex;
+        }
+    }
+
     // Meshes
 
     for (let meshIndex = 0; meshIndex < numMeshes; meshIndex++) {
-
         const mesh = meshesList [meshIndex];
-
         if (mesh.geometry.numInstances > 1) {
-
             data.matrices.set(mesh.matrix, matricesIndex);
             data.eachMeshMatricesPortion [meshIndex] = matricesIndex;
-
             matricesIndex += 16;
         }
-
-        data.eachMeshMaterial[countMeshColors + 0] = Math.floor(mesh.color[0] * 255);
-        data.eachMeshMaterial[countMeshColors + 1] = Math.floor(mesh.color[1] * 255);
-        data.eachMeshMaterial[countMeshColors + 2] = Math.floor(mesh.color[2] * 255);
-        data.eachMeshMaterial[countMeshColors + 3] = Math.floor(mesh.opacity * 255);
-        data.eachMeshMaterial[countMeshColors + 4] = Math.floor(mesh.metallic * 255);
-        data.eachMeshMaterial[countMeshColors + 5] = Math.floor(mesh.roughness * 255);
-
-        countMeshColors += 6;
+        data.eachMeshMaterial[meshIndex] = mesh.material.materialIndex;
     }
 
     // Entities, geometry instances, and tiles
@@ -312,19 +363,31 @@ function deflateData(data) {
 
         metadata: pako.deflate(deflateJSON(data.metadata)),
 
+        textures: pako.deflate(data.textures.buffer),
+
         positions: pako.deflate(data.positions.buffer),
         normals: pako.deflate(data.normals.buffer),
         colors: pako.deflate(data.colors.buffer),
+        uvs: pako.deflate(data.uvs.buffer),
         indices: pako.deflate(data.indices.buffer),
         edgeIndices: pako.deflate(data.edgeIndices.buffer),
 
+        materialTextures: pako.deflate(data.materialTextures),
+        materialAttributes: pako.deflate(data.materialAttributes),
+
         matrices: pako.deflate(data.matrices.buffer),
+
         reusedGeometriesDecodeMatrix: pako.deflate(data.reusedGeometriesDecodeMatrix.buffer),
+
+        eachMaterialType: pako.deflate(data.eachMaterialType),
+        eachMaterialTexturesPortion: pako.deflate(data.eachMaterialTexturesPortion),
+        eachMaterialAttributesPortion: pako.deflate(data.eachMaterialAttributesPortion),
 
         eachGeometryPrimitiveType: pako.deflate(data.eachGeometryPrimitiveType.buffer),
         eachGeometryPositionsPortion: pako.deflate(data.eachGeometryPositionsPortion.buffer),
         eachGeometryNormalsPortion: pako.deflate(data.eachGeometryNormalsPortion.buffer),
         eachGeometryColorsPortion: pako.deflate(data.eachGeometryColorsPortion.buffer),
+        eachGeometryUVsPortion: pako.deflate(data.eachGeometryUVsPortion.buffer),
         eachGeometryIndicesPortion: pako.deflate(data.eachGeometryIndicesPortion.buffer),
         eachGeometryEdgeIndicesPortion: pako.deflate(data.eachGeometryEdgeIndicesPortion.buffer),
 
@@ -356,14 +419,24 @@ function createArrayBuffer(deflatedData) {
 
         deflatedData.metadata,
 
+        deflatedData.textures,
+
         deflatedData.positions,
         deflatedData.normals,
         deflatedData.colors,
+        deflatedData.uvs,
         deflatedData.indices,
         deflatedData.edgeIndices,
 
+        deflatedData.materialTextures,
+        deflatedData.materialAttributes,
+
         deflatedData.matrices,
         deflatedData.reusedGeometriesDecodeMatrix,
+
+        deflatedData.eachMaterialType,
+        deflatedData.eachMaterialTexturesPortion,
+        deflatedData.eachMaterialAttributesPortion,
 
         deflatedData.eachGeometryPrimitiveType,
         deflatedData.eachGeometryPositionsPortion,

@@ -47,10 +47,11 @@ const tempVec3c = math.vec3();
  * @param {Object} params.data CityJSON data.
  * @param {XKTModel} params.xktModel XKTModel to parse into.
  * @param {Object} [params.stats] Collects statistics.
+ * @param {boolean} [params.rotateX] Whether to rotate the model 90 degrees about the X axis to make the Y axis "up", if necessary.
  * @param {function} [params.log] Logging callback.
  * @returns {Promise}
  */
-function parseCityJSONIntoXKTModel({data, xktModel, stats = {}, log}) {
+function parseCityJSONIntoXKTModel({data, xktModel, stats = {}, rotateX, log}) {
 
     return new Promise(function (resolve, reject) {
 
@@ -69,8 +70,8 @@ function parseCityJSONIntoXKTModel({data, xktModel, stats = {}, log}) {
             return;
         }
 
-        const vertices = data.transform // Avoid side effects - don't modify the CityJSON data
-            ? transformVertices(data.vertices, data.transform)
+        const vertices = data.transform || rotateX
+            ? transformVertices(data.vertices, data.transform, rotateX)
             : data.vertices;
 
         stats.sourceFormat = data.type || "";
@@ -127,18 +128,39 @@ function parseCityJSONIntoXKTModel({data, xktModel, stats = {}, log}) {
     });
 }
 
-function transformVertices(vertices, transform) {
+function transformVertices(vertices, transform, rotateX) {
+    if (!transform && !rotateX) {
+        return vertices;
+    }
     const transformedVertices = [];
-    const scale = transform.scale || math.vec3([1, 1, 1]);
-    const translate = transform.translate || math.vec3([0, 0, 0]);
-    for (let i = 0, j = 0; i < vertices.length; i++, j += 3) {
-        const x = (vertices[i][0] * scale[0]) + translate[0];
-        const y = (vertices[i][1] * scale[1]) + translate[1];
-        const z = (vertices[i][2] * scale[2]) + translate[2];
-        transformedVertices.push([x, y, z]);
+    if (transform) {
+        const scale = transform.scale || math.vec3([1, 1, 1]);
+        const translate = transform.translate || math.vec3([0, 0, 0]);
+        for (let i = 0, j = 0; i < vertices.length; i++, j += 3) {
+            const x = (vertices[i][0] * scale[0]) + translate[0];
+            const y = (vertices[i][1] * scale[1]) + translate[1];
+            const z = (vertices[i][2] * scale[2]) + translate[2];
+            if (rotateX) {
+                transformedVertices.push([x, z, y]);
+            } else {
+                transformedVertices.push([x, y, z]);
+            }
+        }
+    } else {
+        for (let i = 0, j = 0; i < vertices.length; i++, j += 3) {
+            const x = vertices[i][0];
+            const y = vertices[i][1];
+            const z = vertices[i][2];
+            if (rotateX) {
+                transformedVertices.push([x, z, y]);
+            } else {
+                transformedVertices.push([x, y, z]);
+            }
+        }
     }
     return transformedVertices;
 }
+
 
 function parseCityJSON(ctx) {
 
